@@ -22,8 +22,22 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
 
-    # FIX #2: cache key now includes libs.versions.toml so version catalog
-    # changes correctly bust the cache
+    # Install Gradle via the official action — avoids manual PATH juggling
+    # and ensures the wrapper jar is available to generate gradlew if missing.
+    - name: Set up Gradle
+      uses: gradle/actions/setup-gradle@v3
+      with:
+        gradle-version: '8.9'
+
+    # Generate gradlew + wrapper jar in case they are not committed to the repo
+    - name: Ensure Gradle wrapper exists
+      run: |
+        if [ ! -f gradlew ]; then
+          gradle wrapper --gradle-version 8.9
+        fi
+        chmod +x gradlew
+
+    # Cache key includes libs.versions.toml so version catalog changes bust the cache
     - name: Cache Gradle packages
       uses: actions/cache@v3
       with:
@@ -34,8 +48,7 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-gradle-
 
-    # FIX #3: generate a debug keystore so the release build can sign the APK.
-    # GitHub Actions runners have no pre-existing ~/.android/debug.keystore.
+    # Generate a debug keystore — CI runners have no pre-existing one
     - name: Generate debug keystore
       run: |
         mkdir -p ~/.android
@@ -46,12 +59,8 @@ jobs:
           -storepass android -keypass android \
           -dname "CN=Android Debug,O=Android,C=US"
 
-    # FIX #1: removed the broken manual Gradle install.
-    # The wrapper (gradlew) is already committed; use it directly.
     - name: Build with Gradle
-      run: |
-        chmod +x gradlew
-        ./gradlew assembleRelease --stacktrace --no-daemon
+      run: ./gradlew assembleRelease --stacktrace --no-daemon
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
