@@ -1,5 +1,5 @@
-name: Build PixelIMS APK
-
+      - name: Build with Gradle
+        run: gradle assembleRelease --stacktrace
 on:
   push:
     branches: [ main ]
