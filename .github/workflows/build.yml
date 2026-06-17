@@ -8,46 +8,26 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
       
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        distribution: 'temurin'
-        java-version: '17'
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
         
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@v3
-      
-    - name: Cache Gradle packages
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.gradle/caches
-          ~/.gradle/wrapper
-        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-        restore-keys: |
-          ${{ runner.os }}-gradle-
+      - name: Grant execute permission
+        run: chmod +x gradlew
           
-    - name: Install Gradle
-      run: |
-        wget https://services.gradle.org/distributions/gradle-8.9-bin.zip
-        unzip -q gradle-8.9-bin.zip
-        export PATH=$PATH:$PWD/gradle-8.9/bin
-        gradle --version
-        
-    - name: Build with Gradle
-      run: |
-        export PATH=$PATH:$PWD/gradle-8.9/bin
-        cd $GITHUB_WORKSPACE
-        gradle assembleRelease --stacktrace --no-daemon
+      - name: Build with Gradle
+        # Use the wrapper (./gradlew) instead of manual 'gradle' command
+        run: ./gradlew assembleRelease --stacktrace
       
-    - name: Upload APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: PixelIMS-release
-        path: app/build/outputs/apk/release/*.apk
-        if-no-files-found: error
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PixelIMS-release
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
