@@ -1,5 +1,5 @@
-      - name: Build with Gradle
-        run: gradle assembleRelease --stacktrace
+name: Build PixelIMS APK
+
 on:
   push:
     branches: [ main ]
@@ -21,10 +21,9 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
         with:
-          gradle-version: '8.9' # Installs the exact version your repo expects
+          gradle-version: '8.9'
           
       - name: Build with Gradle
-        # Notice we use 'gradle' here instead of './gradlew'
         run: gradle assembleRelease --stacktrace
       
       - name: Upload APK
