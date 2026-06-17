@@ -22,14 +22,11 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
 
-    # Install Gradle via the official action — avoids manual PATH juggling
-    # and ensures the wrapper jar is available to generate gradlew if missing.
     - name: Set up Gradle
       uses: gradle/actions/setup-gradle@v3
       with:
         gradle-version: '8.9'
 
-    # Generate gradlew + wrapper jar in case they are not committed to the repo
     - name: Ensure Gradle wrapper exists
       run: |
         if [ ! -f gradlew ]; then
@@ -37,7 +34,6 @@ jobs:
         fi
         chmod +x gradlew
 
-    # Cache key includes libs.versions.toml so version catalog changes bust the cache
     - name: Cache Gradle packages
       uses: actions/cache@v3
       with:
@@ -48,7 +44,6 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-gradle-
 
-    # Generate a debug keystore — CI runners have no pre-existing one
     - name: Generate debug keystore
       run: |
         mkdir -p ~/.android
@@ -59,28 +54,36 @@ jobs:
           -storepass android -keypass android \
           -dname "CN=Android Debug,O=Android,C=US"
 
-    # --- INJECTED FIXES FOR THE 22 COMPILATION ERRORS ---
-
-    - name: Fix NonNull Imports
+    # --- THE HARDENED HIDDEN API FIX ---
+    - name: Fix Source and Inject Hidden APIs
       run: |
-        # Replaces the hidden/removed Android annotation with the public AndroidX one
-        find app/src/main/java -name "*.java" -exec sed -i 's/import android.annotation.NonNull;/import androidx.annotation.NonNull;/g' {} +
+        # 1. Completely strip @NonNull to bypass the missing annotation classpath errors
+        find app/src/main/java -name "*.java" -exec sed -i '/import android.annotation.NonNull;/d' {} +
+        find app/src/main/java -name "*.java" -exec sed -i '/import androidx.annotation.NonNull;/d' {} +
+        find app/src/main/java -name "*.java" -exec sed -i 's/@NonNull //g' {} +
 
-    - name: Inject Stub APIs into Android SDK
-      run: |
-        # 1. Compile the project's stub module first to generate the hidden classes
-        ./gradlew :stub:assembleRelease --no-daemon
+        # 2. Ensure Android 34 and 35 platforms are installed on the runner
+        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "platforms;android-35" > /dev/null
 
-        # 2. Extract the compiled classes.jar from the stub's AAR output
-        mkdir -p stub_temp/classes
-        unzip -q stub/build/outputs/aar/stub-release.aar classes.jar -d stub_temp
-        unzip -q stub_temp/classes.jar -d stub_temp/classes
+        # 3. Clone the widely used Shizuku/Rikka Hidden API Stubs repository
+        git clone --depth 1 https://github.com/RikkaApps/android-hidden-api-stubs.git || true
 
-        # 3. Inject these hidden classes directly into the system's android.jar
-        cd stub_temp/classes
-        zip -ur "$ANDROID_HOME/platforms/android-35/android.jar" .
+        # 4. Overwrite the default restricted android.jar with the stubs
+        if [ -f "android-hidden-api-stubs/android-34/android.jar" ]; then
+          cp android-hidden-api-stubs/android-34/android.jar "$ANDROID_HOME/platforms/android-34/android.jar"
+          # Fallback for API 35
+          cp android-hidden-api-stubs/android-34/android.jar "$ANDROID_HOME/platforms/android-35/android.jar"
+        fi
         
-    # ----------------------------------------------------
+        if [ -f "android-hidden-api-stubs/android-35/android.jar" ]; then
+          cp android-hidden-api-stubs/android-35/android.jar "$ANDROID_HOME/platforms/android-35/android.jar"
+        fi
+        
+        # 5. Unbreakable Fallback to Robolectric full frameworks (hosted on Maven Central, no dead links)
+        if [ ! -f "android-hidden-api-stubs/android-34/android.jar" ]; then
+          wget -qO "$ANDROID_HOME/platforms/android-34/android.jar" "https://repo1.maven.org/maven2/org/robolectric/android-all/14-robolectric-10818077/android-all-14-robolectric-10818077.jar"
+          wget -qO "$ANDROID_HOME/platforms/android-35/android.jar" "https://repo1.maven.org/maven2/org/robolectric/android-all/15-robolectric-12650502/android-all-15-robolectric-12650502.jar"
+        fi
 
     - name: Build with Gradle
       run: ./gradlew assembleRelease --stacktrace --no-daemon
