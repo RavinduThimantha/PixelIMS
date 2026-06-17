@@ -59,6 +59,29 @@ jobs:
           -storepass android -keypass android \
           -dname "CN=Android Debug,O=Android,C=US"
 
+    # --- INJECTED FIXES FOR THE 22 COMPILATION ERRORS ---
+
+    - name: Fix NonNull Imports
+      run: |
+        # Replaces the hidden/removed Android annotation with the public AndroidX one
+        find app/src/main/java -name "*.java" -exec sed -i 's/import android.annotation.NonNull;/import androidx.annotation.NonNull;/g' {} +
+
+    - name: Inject Stub APIs into Android SDK
+      run: |
+        # 1. Compile the project's stub module first to generate the hidden classes
+        ./gradlew :stub:assembleRelease --no-daemon
+
+        # 2. Extract the compiled classes.jar from the stub's AAR output
+        mkdir -p stub_temp/classes
+        unzip -q stub/build/outputs/aar/stub-release.aar classes.jar -d stub_temp
+        unzip -q stub_temp/classes.jar -d stub_temp/classes
+
+        # 3. Inject these hidden classes directly into the system's android.jar
+        cd stub_temp/classes
+        zip -ur "$ANDROID_HOME/platforms/android-35/android.jar" .
+        
+    # ----------------------------------------------------
+
     - name: Build with Gradle
       run: ./gradlew assembleRelease --stacktrace --no-daemon
 
