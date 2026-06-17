@@ -14,11 +14,26 @@ android {
         versionName = "1.0"
     }
 
+    // FIX #4: explicit signingConfigs block so the release build can find the
+    // debug keystore that the CI workflow generates (or that lives on the dev
+    // machine).  The old code referenced signingConfigs["debug"] without ever
+    // declaring it, which compiles locally only by luck (AGP injects a debug
+    // config implicitly for the debug build type, but NOT for release).
+    signingConfigs {
+        named("debug") {
+            storeFile = file("${System.getProperty("user.home")}/.android/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles("proguard-rules.pro")
+            // Points to the explicitly declared signingConfig above
             signingConfig = signingConfigs["debug"]
         }
     }
@@ -49,7 +64,6 @@ android {
 
 dependencies {
     compileOnly(project(":stub"))
-    implementation("androidx.annotation:annotation:1.8.0")
     implementation(libs.shizuku.provider)
     implementation(libs.shizuku.api)
     implementation(libs.hiddenapibypass)
