@@ -19,14 +19,6 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
 
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@v3
-
-    - name: Set up Gradle
-      uses: gradle/actions/setup-gradle@v3
-      with:
-        gradle-version: '8.9'
-
     - name: Ensure Gradle wrapper exists
       run: |
         if [ ! -f gradlew ]; then
@@ -34,56 +26,17 @@ jobs:
         fi
         chmod +x gradlew
 
-    - name: Cache Gradle packages
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.gradle/caches
-          ~/.gradle/wrapper
-        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', '**/libs.versions.toml') }}
-        restore-keys: |
-          ${{ runner.os }}-gradle-
-
-    - name: Generate debug keystore
+    # 1. Clean the project and remove annotations that don't exist
+    - name: Cleanup Source Code
       run: |
-        mkdir -p ~/.android
-        keytool -genkeypair -v \
-          -keystore ~/.android/debug.keystore \
-          -alias androiddebugkey \
-          -keyalg RSA -keysize 2048 -validity 10000 \
-          -storepass android -keypass android \
-          -dname "CN=Android Debug,O=Android,C=US"
-
-    # --- THE HARDENED HIDDEN API FIX ---
-    - name: Fix Source and Inject Hidden APIs
-      run: |
-        # 1. Completely strip @NonNull to bypass the missing annotation classpath errors
         find app/src/main/java -name "*.java" -exec sed -i '/import android.annotation.NonNull;/d' {} +
-        find app/src/main/java -name "*.java" -exec sed -i '/import androidx.annotation.NonNull;/d' {} +
-        find app/src/main/java -name "*.java" -exec sed -i 's/@NonNull //g' {} +
+        find app/src/main/java -name "*.java" -exec sed -i 's/@NonNull//g' {} +
 
-        # 2. Ensure Android 34 and 35 platforms are installed on the runner
-        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "platforms;android-35" > /dev/null
-
-        # 3. Clone the widely used Shizuku/Rikka Hidden API Stubs repository
-        git clone --depth 1 https://github.com/RikkaApps/android-hidden-api-stubs.git || true
-
-        # 4. Overwrite the default restricted android.jar with the stubs
-        if [ -f "android-hidden-api-stubs/android-34/android.jar" ]; then
-          cp android-hidden-api-stubs/android-34/android.jar "$ANDROID_HOME/platforms/android-34/android.jar"
-          # Fallback for API 35
-          cp android-hidden-api-stubs/android-34/android.jar "$ANDROID_HOME/platforms/android-35/android.jar"
-        fi
-        
-        if [ -f "android-hidden-api-stubs/android-35/android.jar" ]; then
-          cp android-hidden-api-stubs/android-35/android.jar "$ANDROID_HOME/platforms/android-35/android.jar"
-        fi
-        
-        # 5. Unbreakable Fallback to Robolectric full frameworks (hosted on Maven Central, no dead links)
-        if [ ! -f "android-hidden-api-stubs/android-34/android.jar" ]; then
-          wget -qO "$ANDROID_HOME/platforms/android-34/android.jar" "https://repo1.maven.org/maven2/org/robolectric/android-all/14-robolectric-10818077/android-all-14-robolectric-10818077.jar"
-          wget -qO "$ANDROID_HOME/platforms/android-35/android.jar" "https://repo1.maven.org/maven2/org/robolectric/android-all/15-robolectric-12650502/android-all-15-robolectric-12650502.jar"
-        fi
+    # 2. Force download required framework stubs before build
+    - name: Inject Hidden API Stubs
+      run: |
+        mkdir -p app/libs
+        wget -qO app/libs/hidden-api.jar https://repo1.maven.org/maven2/org/robolectric/android-all/14-robolectric-10818077/android-all-14-robolectric-10818077.jar
 
     - name: Build with Gradle
       run: ./gradlew assembleRelease --stacktrace --no-daemon
