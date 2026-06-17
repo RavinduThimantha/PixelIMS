@@ -49,6 +49,7 @@ android {
 
 dependencies {
     compileOnly(project(":stub"))
+    implementation "androidx.annotation:annotation:1.8.0"
     implementation(libs.shizuku.provider)
     implementation(libs.shizuku.api)
     implementation(libs.hiddenapibypass)
