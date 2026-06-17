@@ -18,12 +18,14 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
         
-      - name: Grant execute permission
-        run: chmod +x gradle
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.9' # Installs the exact version your repo expects
           
       - name: Build with Gradle
-        # Use the wrapper (./gradlew) instead of manual 'gradle' command
-        run: ./gradle assembleRelease --stacktrace
+        # Notice we use 'gradle' here instead of './gradlew'
+        run: gradle assembleRelease --stacktrace
       
       - name: Upload APK
         uses: actions/upload-artifact@v4
